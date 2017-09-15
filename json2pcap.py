@@ -33,6 +33,25 @@ import argparse
 import subprocess
 from collections import OrderedDict
 
+def make_unique(key, dct):
+    counter = 0
+    unique_key = key
+
+    while unique_key in dct:
+        counter += 1
+        unique_key = '{}_{}'.format(key, counter)
+    return unique_key
+
+
+def parse_object_pairs(pairs):
+    dct = OrderedDict()
+    for key, value in pairs:
+        if key in dct:
+            key = make_unique(key, dct)
+        dct[key] = value
+
+    return dct
+
 #
 # ********* PY TEMPLATES *********
 #
@@ -213,7 +232,7 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
     if hasattr(d, 'items'):
         for k, v in d.items():
             # no recursion
-            if k.endswith("_raw"):
+            if (k.endswith("_raw") or ("_raw_" in k)):
                 h = v[0]
                 p = v[1]
                 l = v[2] * 2
@@ -241,8 +260,9 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                     # if there is also preceding raw protocol frame use it
                     # remove tree suffix
                     key = k
-                    if key.endswith("_tree"):
-                        key = key[:-5]
+                    if (key.endswith("_tree") or ("_tree_" in key)):
+                        key = key.replace('_tree', '')
+                    
                     raw_key = key + "_raw"
                     if (raw_key in d):
                         # f =  d[raw_key][0]
@@ -361,7 +381,8 @@ args = parser.parse_args()
 infile = args.infile[0]
 
 with open(infile) as data_file:
-    json = json.load(data_file, object_pairs_hook=OrderedDict)
+    #json = json.load(data_file, object_pairs_hook=OrderedDict)
+    json = json.load(data_file, object_pairs_hook=parse_object_pairs)
 
 input_frame_raw = ''
 frame_raw = ''
