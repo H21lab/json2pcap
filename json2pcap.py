@@ -228,28 +228,70 @@ def raw_flat_collector(dict):
 def py_generator(d, r, frame_name='frame_raw', frame_position=0):
     if (d is None or d is None):
         return
+    
+    #if (isinstance(d, (list, tuple))):
+    #    for _d in d:
+    #        py_generator(_d, r, frame_name, frame_position)
 
     if hasattr(d, 'items'):
         for k, v in d.items():
+            
+            #    print "=========="
+            #    print "key = " + str(k)
+            #    print "val = " + str(v)
+            # print "frame_name = " + str(frame_name)
+            
             # no recursion
-            if (k.endswith("_raw") or ("_raw_" in k)):
-                h = v[0]
-                p = v[1]
-                l = v[2] * 2
-                b = v[3]
-                t = v[4]
-                if (len(h) != l):
-                    l = len(h)
-
-                p = p - frame_position
-
-                # Add into result dictionary
-                key = str(k).replace('.', '_')
-                fn = frame_name.replace('.', '_')
-                if (fn == key):
-                    fn = None
-                value = [fn , h, p, l, b, t]
-                r[key] = value
+            if ( k.endswith("_raw") or ("_raw_" in k) ):
+                if (isinstance(v[1], (list, tuple)) or isinstance(v[2], (list, tuple)) ):
+                    #i = 1;
+                    for _v in v:
+                        h = _v[0]
+                        p = _v[1]
+                        l = _v[2] * 2
+                        b = _v[3]
+                        t = _v[4]
+                        if (len(h) != l):
+                            l = len(h)
+        
+                        p = p - frame_position
+        
+                        # Add into result dictionary
+                        key = str(k).replace('.', '_')
+                        key = make_unique(key, r)
+                        
+                        fn = frame_name.replace('.', '_')
+                        if (fn == key):
+                            fn = None
+                        #key = str(key) + "_" + str(i)
+                        value = [fn , h, p, l, b, t]
+                        
+                        r[key] = value
+                        
+                        #print "WRITING = " + str(key)
+                        #i = i + 1
+                            
+                else:
+                    h = v[0]
+                    p = v[1]
+                    l = v[2] * 2
+                    b = v[3]
+                    t = v[4]
+                    if (len(h) != l):
+                        l = len(h)
+    
+                    p = p - frame_position
+    
+                    # Add into result dictionary
+                    key = str(k).replace('.', '_')
+                    key = make_unique(key, r)
+                    
+                    fn = frame_name.replace('.', '_')
+                    if (fn == key):
+                        fn = None
+                    value = [fn , h, p, l, b, t]
+                    
+                    r[key] = value
 
             # recursion
             else:
@@ -269,7 +311,38 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                         fn = raw_key
                         fp = d[raw_key][1]
 
+
+                    #print "=========== " + str(key)
                     py_generator(v, r, fn, fp)
+                
+                elif isinstance(v, (list, tuple)):
+                    
+                    fn = frame_name
+                    fp = frame_position
+
+                    # if there is also preceding raw protocol frame use it
+                    # remove tree suffix
+                    key = k
+                    if (key.endswith("_tree") or ("_tree_" in key)):
+                        key = key.replace('_tree', '')
+                    
+                    raw_key = key + "_raw"
+                    if (raw_key in d):
+                        # f =  d[raw_key][0]
+                        fn = raw_key
+                        fp = d[raw_key][1]
+                        
+                    #print ">================="
+                    #print raw_key
+                    ##print d
+                    #print "<================="
+                    
+                    for _v in v:
+                        #fn = str(frame_name)
+                        py_generator(_v, r, frame_name, frame_position)
+                    
+                        
+                    
 
 # To emulate Python 3.2
 def to_bytes(n, length, endianess='big'):
@@ -296,6 +369,9 @@ def rewrite_frame(frame_raw, h, p, l, b, t):
     # bitmask
     else:
         # get hex string from frame which will be replaced
+        # print "p = " + str(p)
+        # print "l = " + str(l)
+        # print "frame_raw = " + str(frame_raw)
         _h = frame_raw[p:p + l]
 
         # add 0 padding to have correct length
@@ -395,21 +471,21 @@ if args.python == False:
 
     # Iterate over packets in JSON
     for packet in json:
-        list = []
+        _list = []
         linux_cooked_header = False;
 
-        # get flat raw fields into list
+        # get flat raw fields into _list
         for raw in raw_flat_collector(packet['_source']['layers']):
             if (raw[0] == "frame_raw"):
                 frame_raw = raw[1][0]
                 input_frame_raw = copy.copy(frame_raw)
             else:
-                list.append(raw[1])
+                _list.append(raw[1])
             if (raw[0] == "sll_raw"):
                 linux_cooked_header = True
 
-        # sort list
-        sorted_list = sorted(list, key=operator.itemgetter(1), reverse=False)
+        # sort _list
+        sorted_list = sorted(_list, key=operator.itemgetter(1), reverse=False)
         sorted_list = sorted(sorted_list, key=operator.itemgetter(2), reverse=True)
         # print("Debug: " + str(sorted_list))
 
@@ -421,8 +497,19 @@ if args.python == False:
             b = raw[3]  # bitmask
             t = raw[4]  # type
 
-            # print("Debug: " + str(raw))
-            frame_raw = rewrite_frame(frame_raw, h, p, l, b, t)
+            if (isinstance(p, (list, tuple)) or isinstance(l, (list, tuple))):
+                for r in raw:
+                    _h = str(r[0])  # hex
+                    _p = r[1] * 2  # position
+                    _l = r[2] * 2  # length
+                    _b = r[3]  # bitmask
+                    _t = r[4]  # type
+                    # print("Debug: " + str(raw))
+                    frame_raw = rewrite_frame(frame_raw, _h, _p, _l, _b, _t)
+                    
+            else:
+                # print("Debug: " + str(raw))
+                frame_raw = rewrite_frame(frame_raw, h, p, l, b, t)
 
         # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame using text2pcap
         if (linux_cooked_header):
@@ -455,6 +542,8 @@ else:
         f.write(py_header)
 
         r = OrderedDict({})
+        
+        #print "packet = " + str(packet['_source']['layers'])
         py_generator(packet['_source']['layers'], r)
 
         for key, value in r.iteritems() :
