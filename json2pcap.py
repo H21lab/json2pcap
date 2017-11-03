@@ -111,73 +111,10 @@ py_footer = py_footer + read_py_function("hex_to_txt")
 py_footer = py_footer + read_py_function("to_bytes")
 py_footer = py_footer + read_py_function("lsb")
 py_footer = py_footer + read_py_function("rewrite_frame")
+py_footer = py_footer + read_py_function("assemble_frame")
+py_footer = py_footer + read_py_function("generate_pcap")
 
 py_footer = py_footer + """
-def assemble_frame(d):
-    input = d['frame_raw'][1]
-    isFlat = False
-    linux_cooked_header = False;
-    while(isFlat == False):
-        isFlat = True
-        for key, val in d.items():
-            h = str(val[1])     # hex
-            p = val[2] * 2      # position
-            l = val[3] * 2      # length
-            b = val[4]          # bitmask
-            t = val[5]          # type
-
-            if (key == "sll_raw"):
-                linux_cooked_header = True;
-
-            # only if the node is not parent
-            isParent = False
-            for k, v in d.items():
-                if (v[0] == key):
-                    isParent = True
-                    isFlat = False
-                    break
-
-            if (isParent == False and val[0] is not None):
-                d[val[0]][1] = rewrite_frame(d[val[0]][1], h, p, l, b, t)
-                del d[key]
-
-    output = d['frame_raw'][1]
-
-    # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame using text2pcap
-    if (linux_cooked_header):
-        output = "000000000000" + output[6*2:] # replce dest MAC
-        output = output[:12*2] + "" + output[14*2:] # remove two bytes before Protocol
-
-    return output
-
-def generate_pcap(d):
-    # 1. Assemble frame
-    input = d['frame_raw'][1]
-    output = assemble_frame(d)
-    print(input)
-    print(output)
-
-    # 2. Testing: compare input and output for not modified json
-    if (input != output):
-        print("Modified frames: ")
-        s1 = input
-        s2 = output
-        print(s1)
-        print(s2)
-        if (len(s1) == len(s2)):
-            d = [i for i in xrange(len(s1)) if s1[i] != s2[i]]
-            print(d)
-
-    # 3. Open TMP file used by text2pcap
-    file = sys.argv[0] + '.tmp'
-    f = open(file,'w')
-    hex_to_txt(output, file)
-    f.close()
-
-    # 4. Generate pcap
-    to_pcap_file(sys.argv[0] + '.tmp', sys.argv[0] + '.pcap')
-    print("Generated " + sys.argv[0] + ".tmp")
-    print("Generated " + sys.argv[0] + ".pcap")
 
 if __name__ == '__main__':
     main()
@@ -420,6 +357,73 @@ def rewrite_frame(frame_raw, h, p, l, b, t):
         masked_h = binascii.hexlify(_H)
 
         return frame_raw[:p] + masked_h + frame_raw[p + l:]
+    
+    
+def assemble_frame(d):
+    input = d['frame_raw'][1]
+    isFlat = False
+    linux_cooked_header = False;
+    while(isFlat == False):
+        isFlat = True
+        for key, val in d.items():
+            h = str(val[1])     # hex
+            p = val[2] * 2      # position
+            l = val[3] * 2      # length
+            b = val[4]          # bitmask
+            t = val[5]          # type
+
+            if (key == "sll_raw"):
+                linux_cooked_header = True;
+
+            # only if the node is not parent
+            isParent = False
+            for k, v in d.items():
+                if (v[0] == key):
+                    isParent = True
+                    isFlat = False
+                    break
+
+            if (isParent == False and val[0] is not None):
+                d[val[0]][1] = rewrite_frame(d[val[0]][1], h, p, l, b, t)
+                del d[key]
+
+    output = d['frame_raw'][1]
+
+    # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame using text2pcap
+    if (linux_cooked_header):
+        output = "000000000000" + output[6*2:] # replce dest MAC
+        output = output[:12*2] + "" + output[14*2:] # remove two bytes before Protocol
+
+    return output
+
+def generate_pcap(d):
+    # 1. Assemble frame
+    input = d['frame_raw'][1]
+    output = assemble_frame(d)
+    print(input)
+    print(output)
+
+    # 2. Testing: compare input and output for not modified json
+    if (input != output):
+        print("Modified frames: ")
+        s1 = input
+        s2 = output
+        print(s1)
+        print(s2)
+        if (len(s1) == len(s2)):
+            d = [i for i in xrange(len(s1)) if s1[i] != s2[i]]
+            print(d)
+
+    # 3. Open TMP file used by text2pcap
+    file = sys.argv[0] + '.tmp'
+    f = open(file,'w')
+    hex_to_txt(output, file)
+    f.close()
+
+    # 4. Generate pcap
+    to_pcap_file(sys.argv[0] + '.tmp', sys.argv[0] + '.pcap')
+    print("Generated " + sys.argv[0] + ".tmp")
+    print("Generated " + sys.argv[0] + ".pcap")
 
 #
 # ************ MAIN **************
