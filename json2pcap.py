@@ -165,19 +165,10 @@ def raw_flat_collector(dict):
 def py_generator(d, r, frame_name='frame_raw', frame_position=0):
     if (d is None or d is None):
         return
-    
-    #if (isinstance(d, (list, tuple))):
-    #    for _d in d:
-    #        py_generator(_d, r, frame_name, frame_position)
 
     if hasattr(d, 'items'):
         for k, v in d.items():
-            
-            #    print "=========="
-            #    print "key = " + str(k)
-            #    print "val = " + str(v)
-            # print "frame_name = " + str(frame_name)
-            
+
             # no recursion
             if ( k.endswith("_raw") or ("_raw_" in k) ):
                 if (isinstance(v[1], (list, tuple)) or isinstance(v[2], (list, tuple)) ):
@@ -190,24 +181,20 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                         t = _v[4]
                         if (len(h) != l):
                             l = len(h)
-        
+
                         p = p - frame_position
-        
+
                         # Add into result dictionary
                         key = str(k).replace('.', '_')
                         key = make_unique(key, r)
-                        
+
                         fn = frame_name.replace('.', '_')
                         if (fn == key):
                             fn = None
-                        #key = str(key) + "_" + str(i)
                         value = [fn , h, p, l, b, t]
-                        
+
                         r[key] = value
-                        
-                        #print "WRITING = " + str(key)
-                        #i = i + 1
-                            
+
                 else:
                     h = v[0]
                     p = v[1]
@@ -216,18 +203,18 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                     t = v[4]
                     if (len(h) != l):
                         l = len(h)
-    
+
                     p = p - frame_position
-    
+
                     # Add into result dictionary
                     key = str(k).replace('.', '_')
                     key = make_unique(key, r)
-                    
+
                     fn = frame_name.replace('.', '_')
                     if (fn == key):
                         fn = None
                     value = [fn , h, p, l, b, t]
-                    
+
                     r[key] = value
 
             # recursion
@@ -241,7 +228,7 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                     key = k
                     if (key.endswith("_tree") or ("_tree_" in key)):
                         key = key.replace('_tree', '')
-                    
+
                     raw_key = key + "_raw"
                     if (raw_key in d):
                         # f =  d[raw_key][0]
@@ -249,11 +236,10 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                         fp = d[raw_key][1]
 
 
-                    #print "=========== " + str(key)
                     py_generator(v, r, fn, fp)
-                
+
                 elif isinstance(v, (list, tuple)):
-                    
+
                     fn = frame_name
                     fp = frame_position
 
@@ -262,24 +248,17 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                     key = k
                     if (key.endswith("_tree") or ("_tree_" in key)):
                         key = key.replace('_tree', '')
-                    
+
                     raw_key = key + "_raw"
                     if (raw_key in d):
-                        # f =  d[raw_key][0]
                         fn = raw_key
                         fp = d[raw_key][1]
-                        
-                    #print ">================="
-                    #print raw_key
-                    ##print d
-                    #print "<================="
-                    
+
                     for _v in v:
-                        #fn = str(frame_name)
                         py_generator(_v, r, frame_name, frame_position)
-                    
-                        
-                    
+
+
+
 
 # To emulate Python 3.2
 def to_bytes(n, length, endianess='big'):
@@ -306,9 +285,6 @@ def rewrite_frame(frame_raw, h, p, l, b, t):
     # bitmask
     else:
         # get hex string from frame which will be replaced
-        # print "p = " + str(p)
-        # print "l = " + str(l)
-        # print "frame_raw = " + str(frame_raw)
         _h = frame_raw[p:p + l]
 
         # add 0 padding to have correct length
@@ -357,8 +333,8 @@ def rewrite_frame(frame_raw, h, p, l, b, t):
         masked_h = binascii.hexlify(_H)
 
         return frame_raw[:p] + masked_h + frame_raw[p + l:]
-    
-    
+
+
 def assemble_frame(d):
     input = d['frame_raw'][1]
     isFlat = False
@@ -510,7 +486,7 @@ if args.python == False:
                     _t = r[4]  # type
                     # print("Debug: " + str(raw))
                     frame_raw = rewrite_frame(frame_raw, _h, _p, _l, _b, _t)
-                    
+
             else:
                 # print("Debug: " + str(raw))
                 frame_raw = rewrite_frame(frame_raw, h, p, l, b, t)
@@ -546,7 +522,7 @@ else:
         f.write(py_header)
 
         r = OrderedDict({})
-        
+
         #print "packet = " + str(packet['_source']['layers'])
         py_generator(packet['_source']['layers'], r)
 
