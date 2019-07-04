@@ -129,12 +129,13 @@ if __name__ == '__main__':
 # ********** FUNCTIONS ***********
 #
 def to_pcap_file(filename, output_pcap_file):
-    subprocess.call(["text2pcap", filename, output_pcap_file])
+    subprocess.call(["text2pcap", "-t", "%s.", filename, output_pcap_file])
 
-def hex_to_txt(hexstring, output_file):
+def hex_to_txt(hexstring, frame_time, output_file):
     h = hexstring.lower()
 
     file = open(output_file, 'a')
+    file.write(frame_time + '\n')
 
     for i in range(0, len(h), 2):
         if(i % 32 == 0):
@@ -335,7 +336,7 @@ def rewrite_frame(frame_raw, h, p, l, b, t):
         return frame_raw[:p] + masked_h + frame_raw[p + l:]
 
 
-def assemble_frame(d):
+def assemble_frame(d, frame_time):
     input = d['frame_raw'][1]
     isFlat = False
     linux_cooked_header = False;
@@ -375,6 +376,7 @@ def assemble_frame(d):
 def generate_pcap(d):
     # 1. Assemble frame
     input = d['frame_raw'][1]
+    frame_time = d['frame']['frame.time_epoch']
     output = assemble_frame(d)
     print(input)
     print(output)
@@ -393,7 +395,7 @@ def generate_pcap(d):
     # 3. Open TMP file used by text2pcap
     file = sys.argv[0] + '.tmp'
     f = open(file,'w')
-    hex_to_txt(output, file)
+    hex_to_txt(output, frame_time, file)
     f.close()
 
     # 4. Generate pcap
@@ -459,6 +461,7 @@ if args.python == False:
             if (raw[0] == "frame_raw"):
                 frame_raw = raw[1][0]
                 input_frame_raw = copy.copy(frame_raw)
+                frame_time = packet['_source']['layers']['frame']['frame.time_epoch']
             else:
                 _list.append(raw[1])
             if (raw[0] == "sll_raw"):
@@ -507,7 +510,7 @@ if args.python == False:
                 d = [i for i in xrange(len(s1)) if s1[i] != s2[i]]
                 print(d)
 
-        hex_to_txt(frame_raw, file)
+        hex_to_txt(frame_raw, frame_time, file)
 
     f.close()
     to_pcap_file(infile + '.tmp', sys.argv[1] + '.pcap')
