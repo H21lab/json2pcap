@@ -23,7 +23,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 import sys
-import json
+import ijson
 import operator
 import copy
 import os
@@ -32,6 +32,12 @@ import array
 import argparse
 import subprocess
 from collections import OrderedDict
+
+try:
+    # Python 2 forward compatibility
+    range = xrange
+except NameError:
+    pass
 
 def make_unique(key, dct):
     counter = 0
@@ -393,7 +399,7 @@ def generate_pcap(d):
         print(s1)
         print(s2)
         if (len(s1) == len(s2)):
-            d = [i for i in xrange(len(s1)) if s1[i] != s2[i]]
+            d = [i for i in range(len(s1)) if s1[i] != s2[i]]
             print(d)
 
     # 3. Open TMP file used by text2pcap
@@ -442,9 +448,7 @@ args = parser.parse_args()
 # read JSON
 infile = args.infile[0]
 
-with open(infile) as data_file:
-    #json = json.load(data_file, object_pairs_hook=OrderedDict)
-    json = json.load(data_file, object_pairs_hook=parse_object_pairs)
+data_file = open(infile)
 
 input_frame_raw = ''
 frame_raw = ''
@@ -456,7 +460,7 @@ if args.python == False:
     f = open(file, 'w')
 
     # Iterate over packets in JSON
-    for packet in json:
+    for packet in ijson.items(data_file, "item", buf_size=200000):
         _list = []
         linux_cooked_header = False;
 
@@ -479,7 +483,6 @@ if args.python == False:
         # print("Debug: " + str(sorted_list))
 
         # rewrite frame
-        print(raw)
         for raw in sorted_list:
             if (len(raw) >= 5):
                 h = str(raw[0])  # hex
@@ -515,7 +518,7 @@ if args.python == False:
             print(s1)
             print(s2)
             if (len(s1) == len(s2)):
-                d = [i for i in xrange(len(s1)) if s1[i] != s2[i]]
+                d = [i for i in range(len(s1)) if s1[i] != s2[i]]
                 print(d)
 
         hex_to_txt(frame_raw, frame_time, file)

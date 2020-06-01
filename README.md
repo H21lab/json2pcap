@@ -8,6 +8,11 @@ Command tshark -T json -x or -T jsonraw output adds into hex-data output in JSON
 
 /wireshark/tools/json2pcap/json2pcap.py
 
+## Prerequisites
+```
+pip install ijson
+```
+
 ## Usage
 ```
 usage: json2pcap.py [-h] [-p] infile [infile ...]
@@ -43,6 +48,9 @@ optional arguments:
   -h, --help    show this help message and exit
   -p, --python  generate python payload instead of pcap (only 1st packet)
 ```
+
+# Limitations
+In case the tshark is performing reassembling from multiple frames, the backward pcap reconstruction performed by json2pcap is not properly recovering the original frames.
 
 # Atribution
 Copyright 2020, Martin Kacer <kacer.martin[AT]gmail.com> and contributors
