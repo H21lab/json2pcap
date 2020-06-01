@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 #
-# Copyright 2017, Martin Kacer <kacer.martin[AT]gmail.com>
+# Copyright 2020, Martin Kacer <kacer.martin[AT]gmail.com>
 #
 # Wireshark - Network traffic analyzer
 # By Gerald Combs <gerald@wireshark.org>
@@ -138,7 +138,7 @@ def hex_to_txt(hexstring, output_file):
 
     for i in range(0, len(h), 2):
         if(i % 32 == 0):
-            file.write(format(i / 2, '06x') + ' ')
+            file.write(format(int(i / 2), '06x') + ' ')
 
         file.write(h[i:i + 2] + ' ')
 
@@ -263,7 +263,7 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
 # To emulate Python 3.2
 def to_bytes(n, length, endianess='big'):
     h = '%x' % n
-    s = ('0' * (len(h) % 2) + h).zfill(length * 2).decode('hex')
+    s = bytearray.fromhex(('0' * (len(h) % 2) + h).zfill(length * 2))
     return s if endianess == 'big' else s[::-1]
 
 # Returns the index, counting from 0, of the least significant set bit in x
@@ -295,7 +295,7 @@ def rewrite_frame(frame_raw, h, p, l, b, t):
 
         # Only replace bits defined by mask
         # new_hex = (old_hex & !mask) | (new_hex & mask)
-        _H = _h.decode("hex")
+        _H = bytearray.fromhex(_h)
         _H = array.array('B', _H)
 
         M = to_bytes(b, len(_H))
@@ -303,11 +303,11 @@ def rewrite_frame(frame_raw, h, p, l, b, t):
         # shift mask aligned to position
         for i in range(len(M)):
             if (i + p / 2) < len(M):
-                M[i] = M[i + p / 2]
+                M[i] = M[i + int(p / 2)]
             else:
                 M[i] = 0x00
 
-        H = h.decode("hex")
+        H = bytearray.fromhex(h)
         H = array.array('B', H)
 
         # for i in range(len(_H)):
@@ -331,8 +331,9 @@ def rewrite_frame(frame_raw, h, p, l, b, t):
         # print
 
         masked_h = binascii.hexlify(_H)
+        masked_h = masked_h.decode('ascii')
 
-        return frame_raw[:p] + masked_h + frame_raw[p + l:]
+        return frame_raw[:p] + str(masked_h) + frame_raw[p + l:]
 
 
 def assemble_frame(d):
@@ -470,26 +471,28 @@ if args.python == False:
         # print("Debug: " + str(sorted_list))
 
         # rewrite frame
+        print(raw)
         for raw in sorted_list:
-            h = str(raw[0])  # hex
-            p = raw[1] * 2  # position
-            l = raw[2] * 2  # length
-            b = raw[3]  # bitmask
-            t = raw[4]  # type
-
-            if (isinstance(p, (list, tuple)) or isinstance(l, (list, tuple))):
-                for r in raw:
-                    _h = str(r[0])  # hex
-                    _p = r[1] * 2  # position
-                    _l = r[2] * 2  # length
-                    _b = r[3]  # bitmask
-                    _t = r[4]  # type
+            if (len(raw) >= 5):
+                h = str(raw[0])  # hex
+                p = raw[1] * 2  # position
+                l = raw[2] * 2  # length
+                b = raw[3]  # bitmask
+                t = raw[4]  # type
+    
+                if (isinstance(p, (list, tuple)) or isinstance(l, (list, tuple))):
+                    for r in raw:
+                        _h = str(r[0])  # hex
+                        _p = r[1] * 2  # position
+                        _l = r[2] * 2  # length
+                        _b = r[3]  # bitmask
+                        _t = r[4]  # type
+                        # print("Debug: " + str(raw))
+                        frame_raw = rewrite_frame(frame_raw, _h, _p, _l, _b, _t)
+    
+                else:
                     # print("Debug: " + str(raw))
-                    frame_raw = rewrite_frame(frame_raw, _h, _p, _l, _b, _t)
-
-            else:
-                # print("Debug: " + str(raw))
-                frame_raw = rewrite_frame(frame_raw, h, p, l, b, t)
+                    frame_raw = rewrite_frame(frame_raw, h, p, l, b, t)
 
         # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame using text2pcap
         if (linux_cooked_header):
