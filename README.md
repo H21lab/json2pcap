@@ -10,6 +10,7 @@ Command tshark -T json -x or -T jsonraw output adds into hex-data output in JSON
 
 ## Prerequisites
 ```
+pip install scapy
 pip install ijson
 ```
 

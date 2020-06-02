@@ -32,6 +32,7 @@ import array
 import argparse
 import subprocess
 from collections import OrderedDict
+from scapy import all as scapy
 
 try:
     # Python 2 forward compatibility
@@ -134,27 +135,6 @@ if __name__ == '__main__':
 #
 # ********** FUNCTIONS ***********
 #
-def to_pcap_file(filename, output_pcap_file):
-    subprocess.call(["text2pcap", "-t", "%s.", filename, output_pcap_file])
-
-def hex_to_txt(hexstring, frame_time, output_file):
-    h = hexstring.lower()
-
-    file = open(output_file, 'a')
-    if frame_time:
-        file.write(frame_time + '\n')
-
-    for i in range(0, len(h), 2):
-        if(i % 32 == 0):
-            file.write(format(int(i / 2), '06x') + ' ')
-
-        file.write(h[i:i + 2] + ' ')
-
-        if(i % 32 == 30):
-            file.write('\n')
-
-    file.write('\n')
-    file.close()
 
 def raw_flat_collector(dict):
     if hasattr(dict, 'items'):
@@ -374,44 +354,12 @@ def assemble_frame(d, frame_time):
 
     output = d['frame_raw'][1]
 
-    # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame using text2pcap
+    # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame
     if (linux_cooked_header):
         output = "000000000000" + output[6*2:] # replce dest MAC
         output = output[:12*2] + "" + output[14*2:] # remove two bytes before Protocol
 
     return output
-
-def generate_pcap(d):
-    # 1. Assemble frame
-    input = d['frame_raw'][1]
-    frame_time = None
-    if 'frame.time_epoch' in d['frame']:
-        frame_time = d['frame']['frame.time_epoch']
-    output = assemble_frame(d)
-    print(input)
-    print(output)
-
-    # 2. Testing: compare input and output for not modified json
-    if (input != output):
-        print("Modified frames: ")
-        s1 = input
-        s2 = output
-        print(s1)
-        print(s2)
-        if (len(s1) == len(s2)):
-            d = [i for i in range(len(s1)) if s1[i] != s2[i]]
-            print(d)
-
-    # 3. Open TMP file used by text2pcap
-    file = sys.argv[0] + '.tmp'
-    f = open(file,'w')
-    hex_to_txt(output, frame_time, file)
-    f.close()
-
-    # 4. Generate pcap
-    to_pcap_file(sys.argv[0] + '.tmp', sys.argv[0] + '.pcap')
-    print("Generated " + sys.argv[0] + ".tmp")
-    print("Generated " + sys.argv[0] + ".pcap")
 
 #
 # ************ MAIN **************
@@ -462,9 +410,7 @@ frame_raw = ''
 
 # Generate pcap
 if args.python == False:
-    # open TMP file used by text2pcap
-    tmp_outfile = outfile + '.tmp'
-    f = open(tmp_outfile, 'w')
+    pcap_out = scapy.PcapWriter(outfile, append=False, sync=False)
 
     # Iterate over packets in JSON
     for packet in ijson.items(data_file, "item", buf_size=200000):
@@ -528,11 +474,9 @@ if args.python == False:
                 d = [i for i in range(len(s1)) if s1[i] != s2[i]]
                 print(d)
 
-        hex_to_txt(frame_raw, frame_time, tmp_outfile)
-
-    f.close()
-    to_pcap_file(tmp_outfile, outfile)
-    os.remove(tmp_outfile)
+        new_packet = scapy.Packet(bytearray.fromhex(frame_raw))
+        new_packet.time = float(frame_time)
+        pcap_out.write(new_packet)
 
 # Generate python payload only for first packet
 else:
