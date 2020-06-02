@@ -1,6 +1,7 @@
 # json2pcap
 
 Script which can be used to reconstruct pcap and perform packet modifications from tshark json output.
+Script is also allowing to perform pcap anonymization.
 
 This repository contains more recent and experimental changes compared to Wireshark (https://github.com/wireshark/wireshark/tree/master/tools/json2pcap).
 
@@ -16,7 +17,7 @@ pip install ijson
 
 ## Usage
 ```
-usage: json2pcap.py [-h] [-i [INFILE]] -o OUTFILE [-p]
+usage: json2pcap.py [-h] [-i [INFILE]] -o OUTFILE [-p] [-a ANONYMIZED_FIELD] [-v]
 
 Utility to generate pcap from json format.
 
@@ -41,6 +42,16 @@ encode the packet variables. The assembling algorithm is different, because
 the decoded packet fields are relative and points to parent node with their
 position (compared to input json which has absolute positions).
 
+Pcap anonymization with -a switch:
+The script allows to  anonymize the selected json raw  fields. If the fields
+selected for anonymization are located on lower protocol layers, then are not
+overwritten  by  upper  fields  which  are  not  marked  for  anonymization.
+The pcap anonymization can be performed in the following way:
+
+tshark -r original.pcap -T json -x | \
+python json2pcap.py -a "ip.src_raw" -a "ip.dst_raw" -o anonymized.pcap
+
+
 optional arguments:
   -h, --help            show this help message and exit
   -i [INFILE], --infile [INFILE]
@@ -50,7 +61,19 @@ optional arguments:
   -o OUTFILE, --outfile OUTFILE
                         output pcap filename
   -p, --python          generate python payload instead of pcap (only 1st packet)
+  -a ANONYMIZED_FIELD, --anonymize ANONYMIZED_FIELD
+                        anonymize the specific raw field (e.g. -a "ip.src_raw" -a "ip.dst_raw")
+  -v, --verbose         verbose output
 ```
+
+# Pcap anonymization
+Pcap anonymization can be performed in the following way:
+```
+tshark -r original.pcap -T json -x | \
+python json2pcap.py -a "ip.src_raw" -a "ip.dst_raw" -o anonymized.pcap
+```
+
+By -a switch should be specified all fields which require anonymization.
 
 # Limitations
 In case the tshark is performing reassembling from multiple frames, the backward pcap reconstruction performed by json2pcap is not properly recovering the original frames.
