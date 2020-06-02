@@ -117,6 +117,7 @@ py_footer = py_footer + read_py_function("to_pcap_file")
 py_footer = py_footer + read_py_function("hex_to_txt")
 py_footer = py_footer + read_py_function("to_bytes")
 py_footer = py_footer + read_py_function("lsb")
+py_footer = py_footer + read_py_function("multiply_strings")
 py_footer = py_footer + read_py_function("rewrite_frame")
 py_footer = py_footer + read_py_function("assemble_frame")
 py_footer = py_footer + read_py_function("generate_pcap")
@@ -245,8 +246,25 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                     for _v in v:
                         py_generator(_v, r, frame_name, frame_position)
 
+def to_pcap_file(filename, output_pcap_file):
+    subprocess.call(["text2pcap", filename, output_pcap_file])
 
+def hex_to_txt(hexstring, output_file):
+    h = hexstring.lower()
 
+    file = open(output_file, 'a')
+
+    for i in range(0, len(h), 2):
+        if(i % 32 == 0):
+            file.write(format(int(i / 2), '06x') + ' ')
+
+        file.write(h[i:i + 2] + ' ')
+
+        if(i % 32 == 30):
+            file.write('\n')
+
+    file.write('\n')
+    file.close()
 
 # To emulate Python 3.2
 def to_bytes(n, length, endianess='big'):
@@ -346,7 +364,8 @@ def assemble_frame(d, frame_time):
     linux_cooked_header = False;
     while(isFlat == False):
         isFlat = True
-        for key, val in d.items():
+        _d = d.copy()
+        for key, val in _d.items():
             h = str(val[1])     # hex
             p = val[2] * 2      # position
             l = val[3] * 2      # length
@@ -377,6 +396,31 @@ def assemble_frame(d, frame_time):
 
     return output
 
+def generate_pcap(d):
+    # 1. Assemble frame
+    input = d['frame_raw'][1]
+    output = assemble_frame(d, None)
+    print(input)
+    print(output)
+    # 2. Testing: compare input and output for not modified json
+    if (input != output):
+        print("Modified frames: ")
+        s1 = input
+        s2 = output
+        print(s1)
+        print(s2)
+        if (len(s1) == len(s2)):
+            d = [i for i in xrange(len(s1)) if s1[i] != s2[i]]
+            print(d)
+    # 3. Open TMP file used by text2pcap
+    file = sys.argv[0] + '.tmp'
+    f = open(file,'w')
+    hex_to_txt(output, file)
+    f.close()
+    # 4. Generate pcap
+    to_pcap_file(sys.argv[0] + '.tmp', sys.argv[0] + '.pcap')
+    print("Generated " + sys.argv[0] + ".tmp")
+    print("Generated " + sys.argv[0] + ".pcap")
 #
 # ************ MAIN **************
 #
