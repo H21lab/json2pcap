@@ -8,19 +8,7 @@
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 1998 Gerald Combs
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 import sys
 import ijson
@@ -96,6 +84,7 @@ import array
 import sys
 import subprocess
 from collections import OrderedDict
+from scapy import all as scapy
 
 # *****************************************************
 # *     PACKET PAYLOAD GENERATED FROM INPUT PCAP      *
@@ -113,8 +102,6 @@ py_footer = """    generate_pcap(d)
 # *****************************************************
 
 """
-py_footer = py_footer + read_py_function("to_pcap_file")
-py_footer = py_footer + read_py_function("hex_to_txt")
 py_footer = py_footer + read_py_function("to_bytes")
 py_footer = py_footer + read_py_function("lsb")
 py_footer = py_footer + read_py_function("multiply_strings")
@@ -246,26 +233,6 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
                     for _v in v:
                         py_generator(_v, r, frame_name, frame_position)
 
-def to_pcap_file(filename, output_pcap_file):
-    subprocess.call(["text2pcap", filename, output_pcap_file])
-
-def hex_to_txt(hexstring, output_file):
-    h = hexstring.lower()
-
-    file = open(output_file, 'a')
-
-    for i in range(0, len(h), 2):
-        if(i % 32 == 0):
-            file.write(format(int(i / 2), '06x') + ' ')
-
-        file.write(h[i:i + 2] + ' ')
-
-        if(i % 32 == 30):
-            file.write('\n')
-
-    file.write('\n')
-    file.close()
-
 # To emulate Python 3.2
 def to_bytes(n, length, endianess='big'):
     h = '%x' % n
@@ -297,6 +264,9 @@ def multiply_strings(original_string, new_string, mask):
 # t - type
 # frame_amask - optional, anonymization mask (00 - not anonymized byte, ff - anonymized byte)
 def rewrite_frame(frame_raw, h, p, l, b, t, frame_amask = None):
+    if p < 0 or l < 0 or h is None:
+        return frame_raw
+
     # no bitmask
     if(b == 0):
         if (len(h) != l):
@@ -412,15 +382,13 @@ def generate_pcap(d):
         if (len(s1) == len(s2)):
             d = [i for i in xrange(len(s1)) if s1[i] != s2[i]]
             print(d)
-    # 3. Open TMP file used by text2pcap
-    file = sys.argv[0] + '.tmp'
-    f = open(file,'w')
-    hex_to_txt(output, file)
-    f.close()
-    # 4. Generate pcap
-    to_pcap_file(sys.argv[0] + '.tmp', sys.argv[0] + '.pcap')
-    print("Generated " + sys.argv[0] + ".tmp")
-    print("Generated " + sys.argv[0] + ".pcap")
+    # 3. Generate pcap
+    outfile = sys.argv[0] + ".pcap"
+    pcap_out = scapy.PcapWriter(outfile, append=False, sync=False)
+    new_packet = scapy.Packet(bytearray.fromhex(output))
+    pcap_out.write(new_packet)
+    print("Generated " + outfile)
+
 #
 # ************ MAIN **************
 #
