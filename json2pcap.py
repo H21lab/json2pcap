@@ -161,6 +161,12 @@ import subprocess
 from collections import OrderedDict
 from scapy import all as scapy
 
+try:
+    # Python 2 forward compatibility
+    range = xrange
+except NameError:
+    pass
+
 # *****************************************************
 # *     PACKET PAYLOAD GENERATED FROM INPUT PCAP      *
 # *     Modify this function to edit the packet       *
@@ -455,7 +461,7 @@ def generate_pcap(d):
         print(s1)
         print(s2)
         if (len(s1) == len(s2)):
-            d = [i for i in xrange(len(s1)) if s1[i] != s2[i]]
+            d = [i for i in range(len(s1)) if s1[i] != s2[i]]
             print(d)
     # 3. Generate pcap
     outfile = sys.argv[0] + ".pcap"
