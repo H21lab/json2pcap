@@ -19,6 +19,8 @@ pip install ijson
 ```
 usage: json2pcap.py [-h] [-i [INFILE]] -o OUTFILE [-p] [-m MASKED_FIELD] [-a ANONYMIZED_FIELD] [-s SALT] [-v]
 
+json2pcap v1.1
+
 Utility to generate pcap from json format.
 
 Packet modification:
@@ -48,11 +50,18 @@ The fields are selected and located on  lower protocol layers, they are not
 The overwritten by  upper fields  which are not  marked by  these switches.
 The pcap masking and anonymization can be performed in the following way:
 
-tshark -r original.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw"
+tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw"
 -a "ip.dst_raw" -o anonymized.pcap
-
 In this example the ip.src_raw field is masked with ffffffff by byte values
 and ip.dst_raw is hashed by randomly generated salt.
+
+Additionally the following syntax is valid to anonymize portion of field
+tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw[2:]"
+-a "ip.dst_raw[:-2]" -o anonymized.pcap
+Where the src_ip first byte is preserved and dst_ip last byte is preserved.
+And the same can be achieved by
+tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw[2:8]"
+-a "ip.dst_raw[0:6]" -o anonymized.pcap
 
 Masking and anonymization  limitations are mainly the following:
 - In case  the tshark is performing reassembling from  multiple frames, the
@@ -72,9 +81,9 @@ optional arguments:
                         output pcap filename
   -p, --python          generate python payload instead of pcap (only 1st packet)
   -m MASKED_FIELD, --mask MASKED_FIELD
-                        mask the specific raw field (e.g. -m "ip.src_raw" -m "ip.dst_raw")
+                        mask the specific raw field (e.g. -m "ip.src_raw" -m "ip.dst_raw[2:6]")
   -a ANONYMIZED_FIELD, --anonymize ANONYMIZED_FIELD
-                        anonymize the specific raw field (e.g. -a "ip.src_raw" -a "ip.dst_raw")
+                        anonymize the specific raw field (e.g. -a "ip.src_raw[2:]" -a "ip.dst_raw[:-2]")
   -s SALT, --salt SALT  salt use for anonymization. If no value is provided it is randomized.
   -v, --verbose         verbose output
 ```

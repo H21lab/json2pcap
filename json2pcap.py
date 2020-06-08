@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 #
-# Copyright 2020, Martin Kacer <kacer.martin[AT]gmail.com>
+# Copyright 2020, Martin Kacer <kacer.martin[AT]gmail.com> and contributors
 #
 # Wireshark - Network traffic analyzer
 # By Gerald Combs <gerald@wireshark.org>
@@ -23,6 +23,7 @@ import string
 import random
 import math
 import hashlib
+import re
 from collections import OrderedDict
 from scapy import all as scapy
 
@@ -31,6 +32,76 @@ try:
     range = xrange
 except NameError:
     pass
+
+# Field anonymization class
+class AnonymizedField:
+    '''
+    The Anonymization field object specifying anonymization
+    :filed arg: field name
+    :type arg: anonymization type [0 masking 0xff, 1 anonymization shake_256]
+    :start arg: If specified, the anonymization starts at given byte number
+    :end arg: If specified, the anonymization ends at given byte number
+    '''
+    def __init__(self, field, type):
+        self.field = field
+        self.type = type
+        self.start = None
+        self.end = None
+
+        match = re.search(r'(\S+)\[(-?\d+)?:(-?\d+)?\]', field)
+        if match:
+            self.field = match.group(1)
+            self.start = match.group(2)
+            if self.start is not None:
+                self.start = int(self.start)
+            self.end = match.group(3)
+            if self.end is not None:
+                self.end = int(self.end)
+
+    # Returns the new field value after anonymization
+    def anonymize_field_shake256(self, field, type, salt):
+        shake = hashlib.shake_256(str(field + ':' + salt).encode('utf-8'))
+
+        # String type, output should be ASCII
+        if type in [26, 27, 28]:
+            length = math.ceil(len(field)/4)
+            shake_hash = shake.hexdigest(length)
+            ret_string = array.array('B', str.encode(shake_hash))
+            ret_string = ''.join('{:02x}'.format(x) for x in ret_string)
+        # Other types, output could be HEX
+        else:
+            length = math.ceil(len(field)/2)
+            shake_hash = shake.hexdigest(length)
+            ret_string = shake_hash
+
+        # Correct the string length
+        if (len(ret_string) < len(field)):
+            ret_string = ret_string.ljust(len(field))
+        if (len(ret_string) > len(field)):
+            ret_string = ret_string[:len(field)]
+
+        return ret_string
+
+    def anonymize_field(self, _h, _t, salt):
+        s = 0
+        e = None
+        if self.start:
+            s = self.start
+        if self.end:
+            e = self.end
+            if e < 0:
+                e = len(_h) + e
+        else:
+            e = len(_h)
+        h = _h[s:e]
+        if self.type == 0:
+            h = 'f' * len(h)
+        elif self.type == 1:
+            h = self.anonymize_field_shake256(h, _t, salt)
+
+        h_mask = '0' * len(_h[0:s]) + 'f' * len(h) + '0' * len(_h[e:])
+        h = _h[0:s] + h + _h[e:]
+        return [h, h_mask]
 
 def make_unique(key, dct):
     counter = 0
@@ -247,30 +318,6 @@ def to_bytes(n, length, endianess='big'):
 def lsb(x):
     return (x & -x).bit_length() - 1
 
-# Returns the new field value after anonymization
-def anonymize_field(field, type, salt):
-    shake = hashlib.shake_256(str(field + ':' + salt).encode('utf-8'))
-
-    # String type, output should be ASCII
-    if type in [26, 27, 28]:
-        length = math.ceil(len(field)/4)
-        shake_hash = shake.hexdigest(length)
-        ret_string = array.array('B', str.encode(shake_hash))
-        ret_string = ''.join('{:02x}'.format(x) for x in ret_string)
-    # Other types, output could be HEX
-    else:
-        length = math.ceil(len(field)/2)
-        shake_hash = shake.hexdigest(length)
-        ret_string = shake_hash
-
-    # Correct the string length
-    if (len(ret_string) < len(field)):
-        ret_string = ret_string.ljust(len(field))
-    if (len(ret_string) > len(field)):
-        ret_string = ret_string[:len(field)]
-
-    return ret_string
-
 # Replace parts of original_string by new_string, only if mask in the byte is not ff
 def multiply_strings(original_string, new_string, mask):
 
@@ -421,6 +468,8 @@ def generate_pcap(d):
 # ************ MAIN **************
 #
 parser = argparse.ArgumentParser(description="""
+json2pcap v1.1
+
 Utility to generate pcap from json format.
 
 Packet modification:
@@ -450,11 +499,18 @@ The fields are selected and located on  lower protocol layers, they are not
 The overwritten by  upper fields  which are not  marked by  these switches.
 The pcap masking and anonymization can be performed in the following way:
 
-tshark -r original.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw"
+tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw"
 -a "ip.dst_raw" -o anonymized.pcap
-
 In this example the ip.src_raw field is masked with ffffffff by byte values
 and ip.dst_raw is hashed by randomly generated salt.
+
+Additionally the following syntax is valid to anonymize portion of field
+tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw[2:]"
+-a "ip.dst_raw[:-2]" -o anonymized.pcap
+Where the src_ip first byte is preserved and dst_ip last byte is preserved.
+And the same can be achieved by
+tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw[2:8]"
+-a "ip.dst_raw[0:6]" -o anonymized.pcap
 
 Masking and anonymization  limitations are mainly the following:
 - In case  the tshark is performing reassembling from  multiple frames, the
@@ -468,8 +524,8 @@ allowed values of the target field and field encoding.
 parser.add_argument('-i', '--infile', nargs='?', help='json generated by tshark -T json -x\nor by tshark -T jsonraw (not preserving frame timestamps).\nIf no inpout file is specified script reads from stdin.')
 parser.add_argument('-o', '--outfile', required=True, help='output pcap filename')
 parser.add_argument('-p', '--python', help='generate python payload instead of pcap (only 1st packet)', default=False, action='store_true')
-parser.add_argument('-m', '--mask', help='mask the specific raw field (e.g. -m "ip.src_raw" -m "ip.dst_raw")', action='append', metavar='MASKED_FIELD')
-parser.add_argument('-a', '--anonymize', help='anonymize the specific raw field (e.g. -a "ip.src_raw" -a "ip.dst_raw")', action='append', metavar='ANONYMIZED_FIELD')
+parser.add_argument('-m', '--mask', help='mask the specific raw field (e.g. -m "ip.src_raw" -m "ip.dst_raw[2:6]")', action='append', metavar='MASKED_FIELD')
+parser.add_argument('-a', '--anonymize', help='anonymize the specific raw field (e.g. -a "ip.src_raw[2:]" -a "ip.dst_raw[:-2]")', action='append', metavar='ANONYMIZED_FIELD')
 parser.add_argument('-s', '--salt', help='salt use for anonymization. If no value is provided it is randomized.', default=None)
 parser.add_argument('-v', '--verbose', help='verbose output', default=False, action='store_true')
 args = parser.parse_args()
@@ -484,6 +540,17 @@ if infile:
 # Read from pipe
 else:
     data_file = sys.stdin
+
+# Parse anonymization fields
+anonymize = {}
+if args.mask:
+    for m in args.mask:
+        af = AnonymizedField(m, 0)
+        anonymize[af.field] = af
+if args.anonymize:
+    for a in args.anonymize:
+        af = AnonymizedField(a, 1)
+        anonymize[af.field] = af
 
 input_frame_raw = ''
 frame_raw = ''
@@ -535,12 +602,8 @@ if args.python == False:
                 h_mask = h       # hex for anonymization mask
 
                 # anonymize fields
-                if (args.mask and raw[5] in args.mask):
-                    h = 'f' * len(h)
-                    h_mask = 'f' * len(h)
-                if (args.anonymize and raw[5] in args.anonymize):
-                    h = anonymize_field(h, t, salt)
-                    h_mask = 'f' * len(h)
+                if (raw[5] in anonymize):
+                    [h, h_mask] = anonymize[raw[5]].anonymize_field(h, t, salt)
 
                 if (isinstance(p, (list, tuple)) or isinstance(l, (list, tuple))):
                     for r in raw:
@@ -553,18 +616,14 @@ if args.python == False:
                         _h_mask = _h    # hex for anonymization mask
 
                         # anonymize fields
-                        if (args.mask and raw[5] in args.mask):
-                            _h = 'f' * len(_h)
-                            _h_mask = 'f' * len(_h)
-                        if (args.anonymize and raw[5] in args.anonymize):
-                            _h = anonymize_field(_h, _t, salt)
-                            _h_mask = 'f' * len(_h)
+                        if (raw[5] in anonymize):
+                            [_h, _h_mask]  = anonymize[raw[5]].anonymize_field(_h, _t, salt)
 
                         # print("Debug: " + str(raw))
                         frame_raw = rewrite_frame(frame_raw, _h, _p, _l, _b, _t, frame_amask)
 
                         # update anonymization mask
-                        if ((args.mask and raw[5] in args.mask) or (args.anonymize and raw[5] in args.anonymize)):
+                        if (raw[5] in anonymize):
                             frame_amask = rewrite_frame(frame_amask, _h_mask, _p, _l, _b, _t)
 
                 else:
@@ -572,7 +631,7 @@ if args.python == False:
                     frame_raw = rewrite_frame(frame_raw, h, p, l, b, t, frame_amask)
 
                     # update anonymization mask
-                    if ((args.mask and raw[5] in args.mask) or (args.anonymize and raw[5] in args.anonymize)):
+                    if (raw[5] in anonymize):
                         frame_amask = rewrite_frame(frame_amask, h_mask, p, l, b, t)
 
         # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame using text2pcap
