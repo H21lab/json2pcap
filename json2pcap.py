@@ -560,6 +560,7 @@ if args.anonymize:
 
 input_frame_raw = ''
 frame_raw = ''
+frame_time = None
 
 salt = args.salt
 if salt is None:
@@ -657,7 +658,8 @@ if args.python == False:
                 print(d)
 
         new_packet = scapy.Packet(bytearray.fromhex(frame_raw))
-        new_packet.time = float(frame_time)
+        if frame_time:
+            new_packet.time = float(frame_time)
         pcap_out.write(new_packet)
 
 # Generate python payload only for first packet
