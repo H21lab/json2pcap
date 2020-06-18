@@ -578,19 +578,22 @@ if args.python == False:
 
         # get flat raw fields into _list
         for raw in raw_flat_collector(packet['_source']['layers']):
-            if (raw[0] == "frame_raw"):
-                frame_raw = raw[1][0]
-                frame_amask = "0"*len(frame_raw) # initialize anonymization mask
-                input_frame_raw = copy.copy(frame_raw)
-                frame_time = None
-                if 'frame.time_epoch' in packet['_source']['layers']['frame']:
-                    frame_time = packet['_source']['layers']['frame']['frame.time_epoch']
-            else:
-                # add into value list into raw[5] the field name
-                raw[1].append(raw[0])
-                _list.append(raw[1])
-            if (raw[0] == "sll_raw"):
-                linux_cooked_header = True
+            if len(raw) >= 2:
+                if (raw[0] == "frame_raw"):
+                    frame_raw = raw[1][0]
+                    frame_amask = "0"*len(frame_raw) # initialize anonymization mask
+                    input_frame_raw = copy.copy(frame_raw)
+                    frame_time = None
+                    if 'frame.time_epoch' in packet['_source']['layers']['frame']:
+                        frame_time = packet['_source']['layers']['frame']['frame.time_epoch']
+                else:
+                    # add into value list into raw[5] the field name
+                    if isinstance(raw[1], list):
+                        print(raw[1])
+                        raw[1].append(raw[0])
+                        _list.append(raw[1])
+                if (raw[0] == "sll_raw"):
+                    linux_cooked_header = True
 
         # sort _list
         sorted_list = sorted(_list, key=operator.itemgetter(1), reverse=False)
@@ -599,7 +602,7 @@ if args.python == False:
 
         # rewrite frame
         for raw in sorted_list:
-            if (len(raw) >= 6):
+            if len(raw) >= 6:
                 h = str(raw[0])  # hex
                 p = raw[1] * 2   # position
                 l = raw[2] * 2   # length
