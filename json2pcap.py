@@ -551,10 +551,16 @@ else:
 anonymize = {}
 if args.mask:
     for m in args.mask:
+        if not '_raw' in m:
+            print("Error: The specified fields by -m switch should be raw fields. " + m + " does not have _raw suffix")
+            sys.exit()
         af = AnonymizedField(m, 0)
         anonymize[af.field] = af
 if args.anonymize:
     for a in args.anonymize:
+        if not '_raw' in a:
+            print("Error: The specified fields by -a switch should be raw fields. " + a + " does not have _raw suffix")
+            sys.exit()
         af = AnonymizedField(a, 1)
         anonymize[af.field] = af
 
@@ -589,7 +595,6 @@ if args.python == False:
                 else:
                     # add into value list into raw[5] the field name
                     if isinstance(raw[1], list):
-                        print(raw[1])
                         raw[1].append(raw[0])
                         _list.append(raw[1])
                 if (raw[0] == "sll_raw"):
