@@ -26,6 +26,7 @@ import hashlib
 import re
 from collections import OrderedDict
 from scapy import all as scapy
+import bitstring
 
 try:
     # Python 2 forward compatibility
@@ -209,11 +210,23 @@ def raw_flat_collector(dict):
     if hasattr(dict, 'items'):
         for k, v in dict.items():
             if k.endswith("_raw"):
-                yield k, v
+                # check if the _raw value is nested list
+                if any(isinstance(i, list) for i in v):
+                    for _v in v:
+                        yield k, _v
+                # else
+                else:
+                    yield k, v
             else:
-                for val in raw_flat_collector(v):
-                    yield val
-
+                # check if the non _raw value is list
+                if type(v) is list:
+                    for _v in v:
+                        for val in raw_flat_collector(_v):
+                            yield val
+                # else
+                else:
+                    for val in raw_flat_collector(v):
+                        yield val
 
 # d - input dictionary, parsed from json
 # r - result dictionary
@@ -317,12 +330,22 @@ def py_generator(d, r, frame_name='frame_raw', frame_position=0):
 # To emulate Python 3.2
 def to_bytes(n, length, endianess='big'):
     h = '%x' % n
-    s = bytearray.fromhex(('0' * (len(h) % 2) + h).zfill(length * 2))
+    s = bytearray.fromhex(('0' * (len(h) % 2) + h).zfill(length * 2)[:length * 2])
     return s if endianess == 'big' else s[::-1]
 
 # Returns the index, counting from 0, of the least significant set bit in x
 def lsb(x):
     return (x & -x).bit_length() - 1
+
+# Returns the index, counting from 0, of the least significant set bit in x from bytetarray
+def lsb_bytearray(X):
+    r = 0
+    for x in reversed(X):
+        if (lsb(x) != -1):
+            return r + lsb(x)
+        else:
+            r = r + 8
+    return -1
 
 # Replace parts of original_string by new_string, only if mask in the byte is not ff
 def multiply_strings(original_string, new_string, mask):
@@ -345,19 +368,31 @@ def multiply_strings(original_string, new_string, mask):
 # t - type
 # frame_amask - optional, anonymization mask (00 - not anonymized byte, ff - anonymized byte)
 def rewrite_frame(frame_raw, h, p, l, b, t, frame_amask = None):
-    if p < 0 or l < 0 or h is None:
+
+    #print("frame_raw = " + str(frame_raw))
+    #print("h = " + str(h))
+    #print("p = " + str(p))
+    #print("l = " + str(l))
+    #print("b = " + str(b))
+    #print("t = " + str(t))
+    #print("frame_amask = " + str(frame_amask))
+
+    if p < 0 or l <= 0 or h is None or not h:
         return frame_raw
 
     # no bitmask
     if(b == 0):
         if (len(h) != l):
             l = len(h)
+
+
         frame_raw_new = frame_raw[:p] + h + frame_raw[p + l:]
         return multiply_strings(frame_raw, frame_raw_new, frame_amask)
     # bitmask
     else:
         # get hex string from frame which will be replaced
         _h = frame_raw[p:p + l]
+        #print("_h = " + _h)
 
         # add 0 padding to have correct length
         if (len(_h) % 2 == 1):
@@ -368,44 +403,83 @@ def rewrite_frame(frame_raw, h, p, l, b, t, frame_amask = None):
         # Only replace bits defined by mask
         # new_hex = (old_hex & !mask) | (new_hex & mask)
         _H = bytearray.fromhex(_h)
-        _H = array.array('B', _H)
+        _H = (array.array('B', _H))
+        #b_H = bitstring.BitArray("0x" + _h)
 
+        # for certain types reverse byte array
+        REVERSED_BYTE_ORDER_TYPES = []
+        if(t in REVERSED_BYTE_ORDER_TYPES):
+            _H = _H[::-1]
+        b_H = bitstring.BitArray(_H)
+
+        # reset the mask byte array
         M = to_bytes(b, len(_H))
         M = array.array('B', M)
+        bM = bitstring.BitArray(M)
+
         # shift mask aligned to position
-        for i in range(len(M)):
-            if (i + p / 2) < len(M):
-                M[i] = M[i + int(p / 2)]
-            else:
-                M[i] = 0x00
+        #for i in range(len(M)):
+        #    if (i + p / 2) < len(M):
+        #        M[i] = M[i + int(p / 2)]
+        #    else:
+        #        M[i] = 0x00
+
+        #for i in range(len(_H)):
+        #    print("_H = {0:08b}".format(_H[i]))
+        #for i in range(len(M)):
+        #    print(" M = {0:08b}".format(M[i]))
+
+        # increase the array if needed
+        if len(h) < len(M)*2:
+            h = h.zfill(len(M)*2)
+        #if len(h) < len(M)*2:
+        #    h = h[::-1].zfill(len(M)*2)[::-1]
 
         H = bytearray.fromhex(h)
         H = array.array('B', H)
+        bH = bitstring.BitArray("0x" + h)
 
-        # for i in range(len(_H)):
-        #    print "{0:08b}".format(_H[i]),
-        # print
-        # for i in range(len(M)):
-        #    print "{0:08b}".format(M[i]),
-        # print
+        #print("bM = " + str(bM.bin))
+        # bit shift the H to the left by bitmask, increase h if the mask is larger
+        if lsb_bytearray(M) != -1:
+            bH = bH << int(lsb_bytearray(M))
 
-        j = 0;
-        for i in range(len(_H)):
-            if (M[i] != 0):
-                v = H[j] << lsb(M[i])
-                # print "Debug: {0:08b}".format(v),
-                _H[i] = (_H[i] & ~M[i]) | (v & M[i])
-                # print "Debug: " + str(_H[i]),
-                j = j + 1;
 
-        # for i in range(len(_H)):
-        #    print "{0:08b}".format(_H[i]),
-        # print
+        #for i in range(len(H)):
+        #    print("after  shift H = {0:08b}".format(_H[i]))
 
-        masked_h = binascii.hexlify(_H)
+        #for i in range(len(H)):
+        #    print(" H = {0:08b}".format(H[i]))
+
+        #j = 0;
+        #for i in range(len(_H)):
+            #if (M[i] != 0):
+            #v = H[j] << lsb(M[i])
+            #print("Debug: {0:08b}".format(v))
+        #    _H[i] = (H[i] & M[i]) | (_H[i] & ~M[i]) #| (v & M[i])
+            #print("Debug: " + str(_H[i]))
+        #    j = j + 1;
+
+        #print("================")
+        #print("b_H = " + str(b_H.bin))
+        #print("bM = " + str(bM.bin))
+        #print("bH = " + str(bH.bin))
+        b_H = bH & bM | b_H & ~bM
+        #print("b_H = " + str(b_H.bin))
+        #print("================")
+        _H = b_H.tobytes()
+
+        #for i in range(len(_H)):
+        #    print("_H = {0:08b}".format(_H[i]))
+
+        # for certain types reverse byte array
+        if(t in REVERSED_BYTE_ORDER_TYPES):
+            _H = _H[::-1]
+        masked_h = binascii.hexlify(_H[::-1])
         masked_h = masked_h.decode('ascii')
 
         frame_raw_new = frame_raw[:p] + str(masked_h) + frame_raw[p + l:]
+
         return multiply_strings(frame_raw, frame_raw_new, frame_amask)
 
 
@@ -473,7 +547,7 @@ def generate_pcap(d):
 #
 # ************ MAIN **************
 #
-VERSION = "1.1"
+VERSION = "1.2"
 
 parser = argparse.ArgumentParser(description="""
 json2pcap {version}
@@ -507,18 +581,18 @@ The fields are selected and located on  lower protocol layers, they are not
 The overwritten by  upper fields  which are not  marked by  these switches.
 The pcap masking and anonymization can be performed in the following way:
 
-tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw"
--a "ip.dst_raw" -o anonymized.pcap
+tshark -r orig.pcap -T json -x --no-duplicate-keys | \ python json2pcap.py
+-m "ip.src_raw" -a "ip.dst_raw" -o anonymized.pcap
 In this example the ip.src_raw field is masked with ffffffff by byte values
 and ip.dst_raw is hashed by randomly generated salt.
 
 Additionally the following syntax is valid to anonymize portion of field
-tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw[2:]"
--a "ip.dst_raw[:-2]" -o anonymized.pcap
+tshark -r orig.pcap -T json -x --no-duplicate-keys  | \ python json2pcap.py
+-m "ip.src_raw[2:]" -a "ip.dst_raw[:-2]" -o anonymized.pcap
 Where the src_ip first byte is preserved and dst_ip last byte is preserved.
 And the same can be achieved by
-tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw[2:8]"
--a "ip.dst_raw[0:6]" -o anonymized.pcap
+tshark -r orig.pcap -T json -x --no-duplicate-keys | \ python json2pcap.py
+-m "ip.src_raw[2:8]" -a "ip.dst_raw[0:6]" -o anonymized.pcap
 
 Masking and anonymization  limitations are mainly the following:
 - In case  the tshark is performing reassembling from  multiple frames, the
@@ -645,14 +719,26 @@ if args.python == False:
                             frame_amask = rewrite_frame(frame_amask, _h_mask, _p, _l, _b, _t)
 
                 else:
-                    # print("Debug: " + str(raw))
+                    #print("Debug: " + str(raw))
+                    #print("Debug: " + str(frame_raw))
+                    s1 = frame_raw
                     frame_raw = rewrite_frame(frame_raw, h, p, l, b, t, frame_amask)
+                    s2 = frame_raw
+
+                    #if (s1 != s2):
+                    #    print("Modified fields: ")
+                    #    print("Field: " + str(raw))
+                    #    print("In : " + str(s1))
+                    #    print("Out: " + str(s2))
+                    #    d = [i for i in range(len(s1)) if s1[i] != s2[i]]
+                    #    print(d)
+                    #print("Debug: " + str(frame_raw))
 
                     # update anonymization mask
                     if (raw[5] in anonymize):
                         frame_amask = rewrite_frame(frame_amask, h_mask, p, l, b, t)
 
-        # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame using text2pcap
+        # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame
         if (linux_cooked_header):
            frame_raw = "000000000000" + frame_raw[6 * 2:]  # replce dest MAC
            frame_raw = frame_raw[:12 * 2] + "" + frame_raw[14 * 2:]  # remove two bytes before Protocol

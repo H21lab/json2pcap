@@ -5,7 +5,7 @@ Script is also allowing to perform pcap masking or anonymization.
 
 This repository contains more recent and experimental changes compared to Wireshark (https://github.com/wireshark/wireshark/tree/master/tools/json2pcap).
 
-Command tshark -T json -x or -T jsonraw output adds into hex-data output in JSON also the information on which position each field is dissected in the original frame, what is the field length, the bitmask (for not byte aligned fields) and the type. This information can be used for latter processing. One use-case is the json2pcap script included in wireshark, which assembles the protocol layers back together from upper to lowers layers. This allows revers json to pcap conversion and also the packet modification/editing/rewriting.
+Command tshark -T json -x or -T jsonraw output adds into hex-data output in JSON also the information on which position each field is dissected in the original frame, what is the field length, the bitmask (for not byte aligned fields) and the type. This information can be used for latter processing. One use-case is the json2pcap script included in wireshark, which assembles the protocol layers back together from upper to lowers layers. This allows reverse json to pcap conversion and also the packet modification/editing/rewriting.
 
 /wireshark/tools/json2pcap/json2pcap.py
 
@@ -13,14 +13,14 @@ Command tshark -T json -x or -T jsonraw output adds into hex-data output in JSON
 ```
 pip install scapy
 pip install ijson
+pip install bitstring
 ```
 
 ## Usage
 ```
-usage: json2pcap.py [-h] [--version] [-i [INFILE]] -o OUTFILE [-p] [-m MASKED_FIELD]
-                    [-a ANONYMIZED_FIELD] [-s SALT] [-v]
+usage: json2pcap.py [-h] [--version] [-i [INFILE]] -o OUTFILE [-p] [-m MASKED_FIELD] [-a ANONYMIZED_FIELD] [-s SALT] [-v]
 
-json2pcap 1.1
+json2pcap 1.2
 
 Utility to generate pcap from json format.
 
@@ -51,18 +51,18 @@ The fields are selected and located on  lower protocol layers, they are not
 The overwritten by  upper fields  which are not  marked by  these switches.
 The pcap masking and anonymization can be performed in the following way:
 
-tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw"
--a "ip.dst_raw" -o anonymized.pcap
+tshark -r orig.pcap -T json -x --no-duplicate-keys | \ python json2pcap.py
+-m "ip.src_raw" -a "ip.dst_raw" -o anonymized.pcap
 In this example the ip.src_raw field is masked with ffffffff by byte values
 and ip.dst_raw is hashed by randomly generated salt.
 
 Additionally the following syntax is valid to anonymize portion of field
-tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw[2:]"
--a "ip.dst_raw[:-2]" -o anonymized.pcap
+tshark -r orig.pcap -T json -x --no-duplicate-keys  | \ python json2pcap.py
+-m "ip.src_raw[2:]" -a "ip.dst_raw[:-2]" -o anonymized.pcap
 Where the src_ip first byte is preserved and dst_ip last byte is preserved.
 And the same can be achieved by
-tshark -r orig.pcap -T json -x  | \ python json2pcap.py -m "ip.src_raw[2:8]"
--a "ip.dst_raw[0:6]" -o anonymized.pcap
+tshark -r orig.pcap -T json -x --no-duplicate-keys | \ python json2pcap.py
+-m "ip.src_raw[2:8]" -a "ip.dst_raw[0:6]" -o anonymized.pcap
 
 Masking and anonymization  limitations are mainly the following:
 - In case  the tshark is performing reassembling from  multiple frames, the
@@ -93,7 +93,7 @@ optional arguments:
 # Pcap anonymization
 Pcap anonymization can be performed in the following way:
 ```
-tshark -r original.pcap -T json -x | \
+tshark -r original.pcap -T json -x --no-duplicate-keys | \
 python json2pcap.py -a "ip.src_raw" -a "ip.dst_raw" -o anonymized.pcap
 ```
 
@@ -104,9 +104,7 @@ In case the tshark is performing reassembly from multiple frames, the backward p
 
 To overcome this limitation it is possible to use tshark with supressed packet reassembly. To disable reassembly for specific protocol use `tshark -o <SELECTED_REASSEMPLY_OPTION>:FALSE`. And for `<SELECTED_REASSEMPLY_OPTION>` see `tshark -G defaultprefs`. After disabling packet reassembly, the protocol frames should be assembled correctly by json2pcap. However the masking/anonymization will not be performed for fragmented protocols.
 
-To properly anonymize SCTP traffic, the pcap should SCTP dechunked first.
-
-# Atribution
+# Attribution
 Copyright 2020, Martin Kacer <kacer.martin[AT]gmail.com> and contributors
 
 # License
