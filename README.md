@@ -104,6 +104,8 @@ In case the tshark is performing reassembly from multiple frames, the backward p
 
 To overcome this limitation it is possible to use tshark with supressed packet reassembly. To disable reassembly for specific protocol use `tshark -o <SELECTED_REASSEMPLY_OPTION>:FALSE`. And for `<SELECTED_REASSEMPLY_OPTION>` see `tshark -G defaultprefs`. After disabling packet reassembly, the protocol frames should be assembled correctly by json2pcap. However the masking/anonymization will not be performed for fragmented protocols.
 
+The fields that are using bitmask could be incorrectly re-encoded. From the tshark json raw output it is ambigious if the field is encoded by little endian or by big endian.
+
 # Attribution
 Copyright 2020, Martin Kacer <kacer.martin[AT]gmail.com> and contributors
 
