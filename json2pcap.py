@@ -366,8 +366,8 @@ def multiply_strings(original_string, new_string, mask):
 # l - length
 # b - bitmask
 # t - type
-# frame_amask - optional, anonymization mask (00 - not anonymized byte, ff - anonymized byte)
-def rewrite_frame(frame_raw, h, p, l, b, t, frame_amask = None):
+# frame_mmask - optional, modification mask (00 - further modifiable byte, ff - further not modifiable byte)
+def rewrite_frame(frame_raw, h, p, l, b, t, frame_mmask = None):
 
     #print("frame_raw = " + str(frame_raw))
     #print("h = " + str(h))
@@ -375,7 +375,7 @@ def rewrite_frame(frame_raw, h, p, l, b, t, frame_amask = None):
     #print("l = " + str(l))
     #print("b = " + str(b))
     #print("t = " + str(t))
-    #print("frame_amask = " + str(frame_amask))
+    #print("frame_mmask = " + str(frame_mmask))
 
     if p < 0 or l <= 0 or h is None or not h:
         return frame_raw
@@ -385,11 +385,14 @@ def rewrite_frame(frame_raw, h, p, l, b, t, frame_amask = None):
         if (len(h) != l):
             l = len(h)
 
-
         frame_raw_new = frame_raw[:p] + h + frame_raw[p + l:]
-        return multiply_strings(frame_raw, frame_raw_new, frame_amask)
+        return multiply_strings(frame_raw, frame_raw_new, frame_mmask)
     # bitmask
     else:
+
+        # TODO: currently do not perform modification for bitmask fields - not reliable
+        return frame_raw
+
         # get hex string from frame which will be replaced
         _h = frame_raw[p:p + l]
         #print("_h = " + _h)
@@ -480,7 +483,7 @@ def rewrite_frame(frame_raw, h, p, l, b, t, frame_amask = None):
 
         frame_raw_new = frame_raw[:p] + str(masked_h) + frame_raw[p + l:]
 
-        return multiply_strings(frame_raw, frame_raw_new, frame_amask)
+        return multiply_strings(frame_raw, frame_raw_new, frame_mmask)
 
 
 def assemble_frame(d, frame_time):
@@ -664,7 +667,7 @@ if args.python == False:
             if len(raw) >= 2:
                 if (raw[0] == "frame_raw"):
                     frame_raw = raw[1][0]
-                    frame_amask = "0"*len(frame_raw) # initialize anonymization mask
+                    frame_mmask = "0"*len(frame_raw) # initialize anonymization mask
                     input_frame_raw = copy.copy(frame_raw)
                     frame_time = None
                     if 'frame.time_epoch' in packet['_source']['layers']['frame']:
@@ -691,7 +694,7 @@ if args.python == False:
                 b = raw[3]       # bitmask
                 t = raw[4]       # type
                 # raw[5]         # field_name (added by script)
-                h_mask = h       # hex for anonymization mask
+                h_mask = 'f' * len(h) # hex for modification mask
 
                 # anonymize fields
                 if (raw[5] in anonymize):
@@ -705,38 +708,44 @@ if args.python == False:
                         _b = r[3]       # bitmask
                         _t = r[4]       # type
                         # raw[5]        # field_name (added by script)
-                        _h_mask = _h    # hex for anonymization mask
+                        _h_mask = 'f' * len(_h) # hex for modification mask
 
                         # anonymize fields
                         if (raw[5] in anonymize):
                             [_h, _h_mask]  = anonymize[raw[5]].anonymize_field(_h, _t, salt)
 
                         # print("Debug: " + str(raw))
-                        frame_raw = rewrite_frame(frame_raw, _h, _p, _l, _b, _t, frame_amask)
+                        s1 = frame_raw
+                        frame_raw = rewrite_frame(frame_raw, _h, _p, _l, _b, _t, frame_mmask)
+                        s2 = frame_raw
 
-                        # update anonymization mask
-                        if (raw[5] in anonymize):
-                            frame_amask = rewrite_frame(frame_amask, _h_mask, _p, _l, _b, _t)
+                        # update modification mask
+                        if (raw[5] in anonymize) or (s1 != s2):
+                            frame_mmask = rewrite_frame(frame_mmask, _h_mask, _p, _l, _b, _t)
 
                 else:
                     #print("Debug: " + str(raw))
                     #print("Debug: " + str(frame_raw))
                     s1 = frame_raw
-                    frame_raw = rewrite_frame(frame_raw, h, p, l, b, t, frame_amask)
+                    a1 = frame_mmask
+                    frame_raw = rewrite_frame(frame_raw, h, p, l, b, t, frame_mmask)
                     s2 = frame_raw
+                    a2 = frame_mmask
 
                     #if (s1 != s2):
                     #    print("Modified fields: ")
                     #    print("Field: " + str(raw))
                     #    print("In : " + str(s1))
+                    #    print("In amask: " + str(a1))
                     #    print("Out: " + str(s2))
+                    #    print("Out amask: " + str(a2))
                     #    d = [i for i in range(len(s1)) if s1[i] != s2[i]]
                     #    print(d)
                     #print("Debug: " + str(frame_raw))
 
-                    # update anonymization mask
-                    if (raw[5] in anonymize):
-                        frame_amask = rewrite_frame(frame_amask, h_mask, p, l, b, t)
+                    # update modification mask
+                    if (raw[5] in anonymize) or (s1 != s2):
+                        frame_mmask = rewrite_frame(frame_mmask, h_mask, p, l, b, t)
 
         # for Linux cooked header replace dest MAC and remove two bytes to reconstruct normal frame
         if (linux_cooked_header):
