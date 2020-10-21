@@ -763,7 +763,7 @@ if args.python == False:
                 d = [i for i in range(len(s1)) if s1[i] != s2[i]]
                 print(d)
 
-        new_packet = scapy.Packet(bytearray.fromhex(frame_raw))
+        new_packet = scapy.Packet(bytes(bytearray.fromhex(frame_raw)))
         if frame_time:
             new_packet.time = float(frame_time)
         pcap_out.write(new_packet)
