@@ -20,7 +20,7 @@ pip install bitstring
 ```
 usage: json2pcap.py [-h] [--version] [-i [INFILE]] -o OUTFILE [-p] [-m MASKED_FIELD] [-a ANONYMIZED_FIELD] [-s SALT] [-v]
 
-json2pcap 1.2
+json2pcap 1.3
 
 Utility to generate pcap from json format.
 

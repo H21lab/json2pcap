@@ -27,6 +27,10 @@ import re
 from collections import OrderedDict
 from scapy import all as scapy
 import bitstring
+from scapy.config import conf
+from scapy.packet import Packet
+
+conf.l2types.register(1, Packet)
 
 try:
     # Python 2 forward compatibility
@@ -528,31 +532,31 @@ def generate_pcap(d):
     # 1. Assemble frame
     input = d['frame_raw'][1]
     output = assemble_frame(d, None)
-    print(input)
-    print(output)
+    #print(input)
+    #print(output)
     # 2. Testing: compare input and output for not modified json
     if (input != output):
-        print("Modified frames: ")
+        #print("Modified frames: ")
         s1 = input
         s2 = output
-        print(s1)
-        print(s2)
+        #print(s1)
+        #print(s2)
         if (len(s1) == len(s2)):
             d = [i for i in range(len(s1)) if s1[i] != s2[i]]
-            print(d)
+            #print(d)
     # 3. Generate pcap
     outfile = sys.argv[0] + ".pcap"
     pcap_out = scapy.PcapWriter(outfile, append=False, sync=False)
     new_packet = scapy.Packet(bytearray.fromhex(output))
     pcap_out.write(new_packet)
-    print("Generated " + outfile)
+    #print("Generated " + outfile)
 
 #
 # ************ MAIN **************
 #
-VERSION = "1.2"
+VERSION = "1.3"
 
-parser = argparse.ArgumentParser(description="""
+parser = argparse.ArgumentParser(description=r"""
 json2pcap {version}
 
 Utility to generate pcap from json format.
@@ -754,18 +758,19 @@ if args.python == False:
 
         # Testing: remove comment to compare input and output for not modified json
         if (args.verbose and input_frame_raw != frame_raw):
-            print("Modified frames: ")
+            #print("Modified frames: ")
             s1 = input_frame_raw
             s2 = frame_raw
-            print(s1)
-            print(s2)
+            #print(s1)
+            #print(s2)
             if (len(s1) == len(s2)):
                 d = [i for i in range(len(s1)) if s1[i] != s2[i]]
-                print(d)
+                #print(d)
 
         new_packet = scapy.Packet(bytes(bytearray.fromhex(frame_raw)))
         if frame_time:
             new_packet.time = float(frame_time)
+        #print(type(new_packet))
         pcap_out.write(new_packet)
 
 # Generate python payload only for first packet
