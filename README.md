@@ -1,3 +1,9 @@
+# 💡 Update: json2pcap
+More recent application **json2pcap** is now available.
+
+You can find it in the https://github.com/h21-lab/apps-collection-info repository.
+👉 [Get Access](https://buy.polar.sh/polar_cl_eRpd2b9nzlDyHdA2M8vYvCiUyCjl4gPZeYiHs41btfM)
+
 # json2pcap
 
 Script which can be used to reconstruct pcap and perform packet modifications from tshark json output.
